@@ -1,0 +1,9 @@
+node_modules/
+dist/
+huberman.db
+*.db
+.env
+.env.local
+.DS_Store
+page-*.jpg
+*.pdf
