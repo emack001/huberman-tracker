@@ -1,12 +1,14 @@
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import {
   settings,
+  users,
   workoutLogs,
   exerciseLogs,
   type Settings,
   type InsertSettings,
+  type User,
   type WorkoutLog,
   type InsertWorkoutLog,
   type ExerciseLog,
@@ -23,6 +25,14 @@ sqlite.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     current_schedule TEXT NOT NULL DEFAULT 'A',
     schedule_start_date TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    stripe_customer_id TEXT,
+    stripe_subscription_id TEXT,
+    is_pro INTEGER NOT NULL DEFAULT 0,
+    pro_expires_at TEXT,
+    created_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS workout_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,6 +61,13 @@ export interface IStorage {
   // Settings
   getSettings(): Settings | undefined;
   upsertSettings(data: InsertSettings): Settings;
+
+  // Users / tier
+  getUser(id: string): User | undefined;
+  upsertUser(id: string, data: Partial<Omit<User, "id">>): User;
+  getUserByStripeCustomerId(customerId: string): User | undefined;
+  getUserByStripeSubscriptionId(subscriptionId: string): User | undefined;
+  setUserPro(id: string, isPro: boolean, expiresAt?: string): void;
 
   // Workout logs
   getWorkoutLogs(): WorkoutLog[];
@@ -83,6 +100,45 @@ export class DatabaseStorage implements IStorage {
       return db.select().from(settings).where(eq(settings.id, existing.id)).get()!;
     }
     return db.insert(settings).values(data).returning().get();
+  }
+
+  // Users
+  getUser(id: string): User | undefined {
+    return db.select().from(users).where(eq(users.id, id)).get();
+  }
+
+  upsertUser(id: string, data: Partial<Omit<User, "id">>): User {
+    const existing = this.getUser(id);
+    if (existing) {
+      if (Object.keys(data).length > 0) {
+        db.update(users).set(data).where(eq(users.id, id)).run();
+      }
+      return db.select().from(users).where(eq(users.id, id)).get()!;
+    }
+    const newUser = {
+      id,
+      createdAt: new Date().toISOString(),
+      isPro: false,
+      ...data,
+    };
+    return db.insert(users).values(newUser).returning().get();
+  }
+
+  getUserByStripeCustomerId(customerId: string): User | undefined {
+    return db.select().from(users).where(eq(users.stripeCustomerId, customerId)).get();
+  }
+
+  getUserByStripeSubscriptionId(subscriptionId: string): User | undefined {
+    return db.select().from(users).where(eq(users.stripeSubscriptionId, subscriptionId)).get();
+  }
+
+  setUserPro(id: string, isPro: boolean, expiresAt?: string): void {
+    // Ensure the user row exists before updating
+    this.upsertUser(id, {});
+    db.update(users)
+      .set({ isPro, proExpiresAt: expiresAt ?? null })
+      .where(eq(users.id, id))
+      .run();
   }
 
   // Workout logs
