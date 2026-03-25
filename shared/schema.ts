@@ -9,6 +9,17 @@ export const settings = sqliteTable("settings", {
   scheduleStartDate: text("schedule_start_date").notNull(), // ISO date when current schedule started
 });
 
+// Users — lightweight identity keyed by a client-generated UUID
+// No passwords: the UUID stored in localStorage acts as the session token
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey(),                       // UUID from client localStorage
+  stripeCustomerId: text("stripe_customer_id"),      // set after first Stripe checkout
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  isPro: integer("is_pro", { mode: "boolean" }).notNull().default(false),
+  proExpiresAt: text("pro_expires_at"),              // ISO datetime; null = no expiry (lifetime/annual)
+  createdAt: text("created_at").notNull(),
+});
+
 // Workout log entries - one per workout session
 export const workoutLogs = sqliteTable("workout_logs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -46,6 +57,7 @@ export type WorkoutLog = typeof workoutLogs.$inferSelect;
 export type InsertWorkoutLog = z.infer<typeof insertWorkoutLogSchema>;
 export type ExerciseLog = typeof exerciseLogs.$inferSelect;
 export type InsertExerciseLog = z.infer<typeof insertExerciseLogSchema>;
+export type User = typeof users.$inferSelect;
 
 // Protocol definition types (not stored in DB, used as reference data)
 export interface ProtocolDay {
